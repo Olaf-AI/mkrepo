@@ -1,0 +1,17 @@
+[project]
+name = "mkrepo"
+version = "0.1.0"
+description = "Generate a repo (multi-file project) from natural language via LLM."
+requires-python = ">=3.13"
+dependencies = [
+    "openai>=2.15.0",
+    "platformdirs>=4.5.1",
+    "rich>=14.2.0",
+    "typer>=0.21.1",
+]
+[project.scripts]
+mkrepo = "mkrepo.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
