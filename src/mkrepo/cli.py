@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -12,13 +11,15 @@ from .config import AppConfig, load_config, save_config, redact_key, config_path
 from .generator import generate_repos
 from .fs import write_text_file
 
-app = typer.Typer(add_completion=False)
+app = typer.Typer(add_completion=False, no_args_is_help=False)
 console = Console()
 
 
 def _read_multiline_input() -> str:
     """
-    If stdin piped, read all. Else prompt user to type multiple lines, end with EOF (Ctrl+Z on Windows, Ctrl+D on Unix).
+    If stdin piped, read all. Else prompt user to type multiple lines, end with EOF.
+    Windows: Ctrl+Z then Enter
+    macOS/Linux: Ctrl+D
     """
     if not sys.stdin.isatty():
         return sys.stdin.read()
@@ -34,8 +35,8 @@ def _read_multiline_input() -> str:
     return "\n".join(lines).strip()
 
 
-@app.command()
-def config():
+@app.command("config")
+def config_cmd():
     """
     Configure mkrepo globally (model, base_url, api_key).
     """
@@ -44,7 +45,20 @@ def config():
 
     base_url = typer.prompt("base_url", default=cfg.base_url)
     model = typer.prompt("model", default=cfg.model)
-    api_key = typer.prompt("api_key", default=cfg.api_key, hide_input=True)
+    console.print(f"current api_key: {redact_key(cfg.api_key) or '(empty)'}")
+    api_key_in = typer.prompt(
+        "api_key (leave blank to keep, '-' to clear)",
+        default="",
+        hide_input=True,
+        show_default=False,
+    ).strip()
+
+    if api_key_in == "":
+        api_key = cfg.api_key
+    elif api_key_in == "-":
+        api_key = ""
+    else:
+        api_key = api_key_in
 
     http_referer = typer.prompt("http_referer (optional)", default=cfg.http_referer)
     x_title = typer.prompt("x_title (optional)", default=cfg.x_title)
@@ -65,18 +79,7 @@ def config():
     )
 
 
-@app.command()
-def main(
-        config_only: bool = typer.Option(False, "-c", "--config", help="Run config wizard"),
-        dry_run: bool = typer.Option(False, "--dry-run", help="Print plan only, do not write files"),
-):
-    """
-    Generate a repo (multi-file project) from natural language.
-    """
-    if config_only:
-        config()
-        raise typer.Exit(0)
-
+def _run_default(dry_run: bool) -> None:
     cfg = load_config()
 
     # 1) input
@@ -99,7 +102,7 @@ def main(
         )
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        console.print("Tip: run `mkrepo -c` to configure api_key/model/base_url.")
+        console.print("Tip: run `mkrepo -c` or `mkrepo config` to configure api_key/model/base_url.")
         raise typer.Exit(1)
 
     repos = result.repos
@@ -112,16 +115,15 @@ def main(
 
         console.print(Panel.fit(f"Repo {i}", title="mkrepo"))
 
-        name = typer.prompt(f"repo {i} name", default=default_name)
+        _ = typer.prompt(f"repo {i} name", default=default_name)  # 先保留交互位，未来可写回 repo["name"]
         out_dir = typer.prompt(f"repo {i} dir", default=default_dir)
 
         files = repo.get("files", [])
         console.print("[bold]making files:[/bold]")
         for f in files:
             path = str(f.get("path", "")).strip()
-            if not path:
-                continue
-            console.print(f"  > {path}")
+            if path:
+                console.print(f"  > {path}")
 
         if dry_run:
             console.print("[yellow]dry-run: skip writing files[/yellow]")
@@ -133,11 +135,11 @@ def main(
         wrote = 0
         for f in files:
             path = str(f.get("path", "")).strip()
-            content = str(f.get("content", ""))
+            file_content = str(f.get("content", ""))
             if not path:
                 continue
             try:
-                write_text_file(base, path, content)
+                write_text_file(base, path, file_content)
                 wrote += 1
             except Exception as e:
                 console.print(f"[red]Failed:[/red] {path} -> {e}")
@@ -145,3 +147,24 @@ def main(
         console.print(f"[green]repo {i} done:[/green] wrote {wrote} files into {base.resolve()}")
 
     console.print(Panel.fit("done", title="mkrepo"))
+
+
+@app.callback(invoke_without_command=True)
+def entry(
+        ctx: typer.Context,
+        config_only: bool = typer.Option(False, "-c", "--config", help="Run config wizard"),
+        dry_run: bool = typer.Option(False, "--dry-run", help="Print plan only, do not write files"),
+):
+    """
+    Default entrypoint: `mkrepo` runs generation flow.
+    Subcommands still work: `mkrepo config`.
+    """
+    # 如果用户输入了子命令（例如 mkrepo config），这里不要抢执行
+    if ctx.invoked_subcommand is not None:
+        return
+
+    if config_only:
+        config_cmd()
+        raise typer.Exit(0)
+
+    _run_default(dry_run=dry_run)

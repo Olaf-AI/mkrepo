@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -12,7 +13,7 @@ def safe_join(base_dir: Path, rel_path: str) -> Path:
     base = base_dir.resolve()
 
     # Ensure target is within base
-    if base == target or str(target).startswith(str(base) + str(Path.sep)):
+    if base == target or str(target).startswith(str(base) + str(os.sep)):
         return target
     raise ValueError(f"Unsafe path (path traversal?): {rel_path}")
 
