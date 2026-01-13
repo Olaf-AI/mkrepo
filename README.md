@@ -33,5 +33,6 @@ model: openai/gpt-4o-mini (example)
 ## TODO
 
 * [DONE] 第二次输入key 是能看到的，不安全
-* 预览的内容有些问题 需要去提前显示文件结构
-* 支持更多的调用base
+* [DONE] 预览的内容有些问题 需要去提前显示文件结构
+* [DONE] 支持更多的调用API 
+* 

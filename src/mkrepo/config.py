@@ -11,6 +11,25 @@ APP_NAME = "mkrepo"
 
 Provider = Literal["openrouter", "openai", "anthropic", "google", "openai_compat"]
 
+# Provider-specific default models for the config wizard.
+# These are only *defaults*; users can override to any valid model.
+DEFAULT_MODEL_BY_PROVIDER: dict[str, str] = {
+    # OpenRouter uses provider-prefixed model names
+    "openrouter": "openai/gpt-4o-mini",
+    # OpenAI official API uses bare model names
+    "openai": "gpt-4o-mini",
+    # Generic OpenAI-compatible gateways usually use bare model names
+    "openai_compat": "gpt-4o-mini",
+    # Claude / Gemini examples
+    "anthropic": "claude-3-5-sonnet-20241022",
+    "google": "gemini-2.0-flash",
+}
+
+
+def default_model_for_provider(provider: Provider) -> str:
+    """Return a sensible default model string for the given provider."""
+    return DEFAULT_MODEL_BY_PROVIDER.get(provider, DEFAULT_MODEL_BY_PROVIDER["openrouter"])
+
 
 @dataclass
 class AppConfig:

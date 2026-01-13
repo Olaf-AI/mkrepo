@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.tree import Tree
 
-from .config import AppConfig, load_config, save_config, redact_key, config_path
+from .config import AppConfig, load_config, save_config, redact_key, config_path, default_model_for_provider
 from .generator import generate_repos, validate_repos
 from .fs import write_text_file
 
@@ -85,8 +85,13 @@ def config_cmd():
     elif provider == "google":
         google_base_url = typer.prompt("google_base_url", default=google_base_url).strip()
 
-    # Model
-    model = typer.prompt("model", default=cfg.model).strip()
+    # Model (default should follow provider when switching)
+    model_default = cfg.model
+    if provider != cfg.provider:
+        # When user changes provider, suggest that provider's default model instead
+        # of carrying over a potentially incompatible previous model string.
+        model_default = default_model_for_provider(provider)  # type: ignore[arg-type]
+    model = typer.prompt("model", default=model_default).strip()
 
     # Keys
     api_key = cfg.api_key
@@ -276,11 +281,17 @@ def _run_default(dry_run: bool) -> None:
     # 4) interactive per repo
     for i, repo in enumerate(repos, start=1):
         default_name = str(repo.get("name", f"repo-{i}"))
-        default_dir = str(repo.get("dir", default_name))
+        planned_dir = str(repo.get("dir", "") or "").strip()
 
         console.print(Panel.fit(f"Repo {i}", title="mkrepo"))
 
         name = typer.prompt(f"repo {i} name", default=default_name).strip()
+
+        # If the plan used the default dir (= repo name) or left it empty,
+        # follow the user's (possibly edited) repo name.
+        auto_dir = (not planned_dir) or (planned_dir == default_name)
+        default_dir = name if auto_dir else planned_dir
+
         out_dir = typer.prompt(f"repo {i} dir", default=default_dir).strip()
         repo["name"] = name
         repo["dir"] = out_dir
